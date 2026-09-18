@@ -63,7 +63,7 @@ jobs:
     needs: terraform-plan
 
     environment:
-      name: production
+      name: Production
 
     steps:
       - name: Checkout repository
