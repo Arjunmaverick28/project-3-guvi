@@ -1,0 +1,107 @@
+
+name: Project 3 - Terraform CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ap-south-1
+  TF_IN_AUTOMATION: true
+
+jobs:
+  terraform-plan:
+    name: Terraform Validate and Plan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.3
+
+      - name: Terraform Format
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Initialize
+        run: terraform init
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -out=project3.tfplan
+
+      - name: Upload Terraform Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan
+          path: project3.tfplan
+          retention-days: 1
+
+  terraform-apply:
+    name: Manual Approval and Apply
+    needs: terraform-plan
+    runs-on: ubuntu-latest
+
+    # Configure this GitHub Environment with required reviewers.
+    environment: production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.3
+
+      - name: Terraform Initialize
+        run: terraform init
+
+      - name: Download Terraform Plan
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-plan
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve project3.tfplan
+
+      - name: Show Terraform Outputs
+        run: terraform output
+
+      - name: Verify Website
+        run: |
+          WEBSITE_URL=$(terraform output -raw website_url)
+          echo "Checking $WEBSITE_URL"
+          for attempt in {1..12}; do
+            if curl --fail --silent --show-error "$WEBSITE_URL"; then
+              echo "Website is responding."
+              exit 0
+            fi
+            echo "Attempt $attempt failed; waiting 10 seconds..."
+            sleep 10
+          done
+          echo "Website did not respond successfully."
+          exit 1
