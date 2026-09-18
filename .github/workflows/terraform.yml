@@ -10,6 +10,10 @@ on:
 permissions:
   id-token: write
   contents: read
+  
+concurrency:
+  group: project-3-guvi-terraform
+  cancel-in-progress: false 
 
 env:
   AWS_REGION: ap-south-1
